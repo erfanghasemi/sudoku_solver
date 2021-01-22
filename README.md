@@ -1,2 +1,2 @@
 # sudoku_solver
-This project is a sudoku solver implement by Constraint satisfaction problem.
+This project is a sudoku-solver implement by Constraint satisfaction problem. We add the colour option to our sudoku problem as if the number of a place is bigger than other neighbours, the colour of that place must be higher in a given colour's priority. We use the Constraint satisfaction problem(CSP), as we said before, in additional apply degree and MRV heuristic for selecting a variable. After we assigned a value to the selected variable, apply forward-checking to update the domain of variables. If there is a solution for the sudoku problem, we report it; otherwise, the search is unsuccessful, and we have not a solution. 
