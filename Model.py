@@ -155,6 +155,7 @@ class State:
     def set_value(self, position: tuple, type_variable: str, value):
         if type_variable == "NUMBER":
             self.number_variables[position[0]][position[1]].set_value(value)
+        else:
             self.color_variables[position[0]][position[1]].set_value(value)
 
         self.complete_variables += 1
@@ -265,7 +266,18 @@ class State:
         return selected_variable
 
     def next_childes(self):
-        pass
+        children = []
+        selected_variable = self.MRV_degree()
+        for choice in selected_variable.domain:
+            child = deepcopy(self)
+            child.set_value(selected_variable.position, choice)
+            if child.forward_checking(selected_variable.position) == -1:
+                child.deactivate_state()
+            else:
+                children.append(child)
+            if child.complete_variables:
+                return child
+        return children
 
     def __str__(self):
         representation = ""
@@ -339,27 +351,24 @@ class IO:
                 self.priorities.append(new_variable)
                 self.color_variables[x][y] = new_variable
 
-        return self.color_count, self.table_size, self.number_variables, self.color_variables, self.complete_variables,\
-               self.priorities, init_number_assignment, init_color_assignment
+        init_state = State(self.table_size, self.number_variables, self.color_variables, self.complete_variables, self.priorities)
+        for item in init_number_assignment:
+            init_state.set_value((item[0], item[1]), "NUMBER", item[2])
+            init_state.forward_checking(self.number_variables[item[0]][item[1]])
+
+        for item in init_color_assignment:
+            init_state.set_value((item[0], item[1]), "COLOR", item[2])
+            init_state.forward_checking(self.color_variables[item[0]][item[1]])
+
+        return init_state
 
 
 if __name__ == "__main__":
     IO_parser = IO()
-    color_count, table_size, number_variables, color_variables, complete_variables, priorities , init_number_assignment, init_color_assignment = IO_parser.get_input()
-    init_state = State(table_size, number_variables, color_variables, complete_variables, priorities)
-
+    init_state = IO_parser.get_input()
     print(init_state)
-    for item in init_number_assignment:
-        init_state.set_value((item[0], item[1]), "NUMBER", item[2])
-        init_state.forward_checking(number_variables[item[0]][item[1]])
-        print(init_state)
-        print(init_state.MRV_degree())
 
-    for item in init_color_assignment:
-        init_state.set_value((item[0], item[1]), "COLOR", item[2])
-        init_state.forward_checking(color_variables[item[0]][item[1]])
-        print(init_state.MRV_degree())
-        print(init_state)
+
 
 
 
