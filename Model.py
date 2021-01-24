@@ -29,11 +29,14 @@ class Variable:
     def is_Empty(self):
         return self.domain_size == 0
 
-    def __ge__(self, other):
-        return self.priority >= other.priority
+    def __gt__(self, other):
+        return self.priority > other.priority
 
     def __lt__(self, other):
         return self.priority < other.priority
+
+    def __hash__(self):
+        return hash((self.position, self.value))
 
     def __str__(self):
         return "Position : " + str((self.position[0]+1, self.position[1]+1)) + " | Degree : " + str(self.degree) + " | Type : " + self.type + " | Set_Flag : " + str(self.set_flag)
@@ -152,10 +155,19 @@ class State:
     def set_value(self, position: tuple, type_variable: str, value):
         if type_variable == "NUMBER":
             self.number_variables[position[0]][position[1]].set_value(value)
-        else:
             self.color_variables[position[0]][position[1]].set_value(value)
 
         self.complete_variables += 1
+
+    def update_priorities(self):
+        self.priorities.clear()
+        for line in self.number_variables:
+            for n_variable in line:
+                self.priorities.append(n_variable)
+
+        for line in self.color_variables:
+            for c_variable in line:
+                self.priorities.append(c_variable)
 
     def forward_checking(self, variable):
 
@@ -170,7 +182,7 @@ class State:
                     if variable.value in self.number_variables[x][y].domain:
                         self.number_variables[x][y].modify_domain(variable.value)
                         self.number_variables[x][y].degree -= 1
-
+                        self.number_variables[x][y].update_priority()
                     if self.number_variables[x][y].is_Empty():
                         return -1
 
@@ -185,6 +197,9 @@ class State:
                         else:
                             color_variable.restrict_domain(self.number_variables[x][y].domain[self.number_variables[x][y].value], "lt")
                             color_variable.degree -= 1
+                        color_variable.update_priority()
+                        if color_variable.is_Empty():
+                            return -1
 
         if type(variable) == ColorVariable:
             neighbours = variable.get_neighbours()
@@ -195,7 +210,7 @@ class State:
                     if variable.value in self.color_variables[x][y].domain:
                         self.color_variables[x][y].modify_domain(variable.value)
                         self.color_variables[x][y].degree -= 1
-
+                        self.color_variables[x][y].update_priority()
                     if self.color_variables[x][y].is_Empty():
                         return -1
 
@@ -210,6 +225,9 @@ class State:
                         else:
                             number_variable.restrict_domain(self.number_variables[x][y].value, "lt")
                             number_variable.degree -= 1
+                        number_variable.update_priority()
+                        if number_variable.is_Empty():
+                            return -1
 
         if color_variable.set_flag is True and number_variable.set_flag is True:
             neighbours = color_variable.get_neighbours()
@@ -224,6 +242,9 @@ class State:
                     else:
                         self.color_variables[x][y].restrict_domain(color_variable.domain[color_variable.value], "gt")
                         self.color_variables[x][y].degree -= 1
+                    self.color_variables[x][y].update_priority()
+                    if self.color_variables[x][y].is_Empty():
+                        return -1
 
                 elif self.number_variables[x][y].set_flag is False and self.color_variables[x][y].set_flag is True:
 
@@ -233,10 +254,14 @@ class State:
                     else:
                         self.number_variables[x][y].restrict_domain(number_variable.value, "gt")
                         self.number_variables[x][y].degree -= 1
+                    self.number_variables[x][y].update_priority()
+                    if self.number_variables[x][y].is_Empty():
+                        return -1
+        self.update_priorities()
 
     def MRV_degree(self):
         self.priorities.sort()
-        selected_variable = self.priorities.pop(0)
+        selected_variable = self.priorities.pop()
         return selected_variable
 
     def next_childes(self):
@@ -328,10 +353,12 @@ if __name__ == "__main__":
         init_state.set_value((item[0], item[1]), "NUMBER", item[2])
         init_state.forward_checking(number_variables[item[0]][item[1]])
         print(init_state)
+        print(init_state.MRV_degree())
 
     for item in init_color_assignment:
         init_state.set_value((item[0], item[1]), "COLOR", item[2])
         init_state.forward_checking(color_variables[item[0]][item[1]])
+        print(init_state.MRV_degree())
         print(init_state)
 
 
