@@ -1,20 +1,33 @@
-import heapq
+from copy import deepcopy
 
 
 class Variable:
-    def __init__(self, position: tuple, degree: int, set_flag: bool, priority: float, table_size: int):
+    def __init__(self, position: tuple, value, degree: int, set_flag: bool, priority: float, table_size: int, domain):
         self.position = position
         self.table_size = table_size
         self.degree = degree
         self.set_flag = set_flag
         self.priority = priority
+        self.value = value
+        self.domain = domain
+        self.domain_size = len(self.domain)
         self.type = None
 
-    def get_neighbours(self):
-        pass
+    @staticmethod
+    def count_adjacent(position: tuple, table_size: int):
+        x, y = position
+        if x == 0 or y == 0 or x == table_size - 1 or y == table_size - 1:
+            if (x, y) == (0, 0) or (x, y) == (table_size - 1, 0) or (x, y) == (0, table_size - 1) or (x, y) == (table_size - 1, table_size - 1):
+                return 2
+            return 3
+        return 4
 
-    # def __hash__(self):
-    #     return hash((self.position, self.type))
+    def set_value(self, value):
+        self.value = value
+        self.set_flag = True
+
+    def is_Empty(self):
+        return self.domain_size == 0
 
     def __ge__(self, other):
         return self.priority >= other.priority
@@ -27,11 +40,8 @@ class Variable:
 
 
 class NumberVariable(Variable):
-    def __init__(self, value: int, position: tuple, degree: int, set_flag: bool, priority: float, table_size: int, color_count: int):
-        super().__init__(position, degree, set_flag, priority, table_size)
-        self.value = value
-        self.domain = list(range(1, table_size+1))
-        self.domain_size = len(self.domain)
+    def __init__(self,  value: int, position: tuple, degree: int, set_flag: bool, priority: float, table_size: int, color_count: int, domain: set):
+        super().__init__(position, value, degree, set_flag, priority, table_size, domain)
         self.type = "NUMBER"
         self.color_count = color_count
 
@@ -44,11 +54,11 @@ class NumberVariable(Variable):
                 neighbours.append((self.position[0], i))
         return neighbours
 
-    def is_Empty(self):
-        return self.domain_size == 0
+    def update_priority(self):
+        self.priority = max(self.table_size, self.color_count) - self.domain_size + (self.degree / (2 * self.table_size + 3))
 
-    def calculate_priority(self):
-        priority = max(self.table_size, self.color_count) - self.domain_size + (self.degree / (2 * self.table_size + 3))
+    def modify_domain(self, value):
+        self.domain.remove(value)
 
     def __str__(self):
         prefix = super().__str__()
@@ -57,10 +67,7 @@ class NumberVariable(Variable):
 
 class ColorVariable(Variable):
     def __init__(self, value: str, position: tuple, domain: dict, degree: int, set_flag: bool, priority: float, table_size: int, color_count: int):
-        super().__init__(position, degree, set_flag, priority, table_size)
-        self.value = value
-        self.domain = domain
-        self.domain_size = len(self.domain)
+        super().__init__(position, value, degree, set_flag, priority, table_size, domain)
         self.type = "COLOR"
         self.color_count = color_count
 
@@ -80,12 +87,11 @@ class ColorVariable(Variable):
 
         return neighbours
 
-    def calculate_priority(self):
-        priority = max(self.table_size, self.color_count) - self.domain_size + (self.degree / (2*self.table_size+3))
-        return
+    def update_priority(self):
+        self.priority = max(self.table_size, self.color_count) - self.domain_size + (self.degree / (2*self.table_size+3))
 
-    def is_Empty(self):
-        return self.domain_size == 0
+    def modify_domain(self, value):
+        self.domain.pop(value, None)
 
     def __str__(self):
         prefix = super().__str__()
@@ -93,26 +99,54 @@ class ColorVariable(Variable):
 
 
 class State:
-    def __init__(self, size_table: int, number_variables: list, color_variables: list):
+    def __init__(self, size_table: int, number_variables: list, color_variables: list, complete_variables: int, priorities: list):
         self.size_table = size_table
         self.number_variables = number_variables
         self.color_variables = color_variables
-        self.complete_variables = 0
-        self.priorities = []
+        self.complete_variables = complete_variables
+        self.priorities = priorities
+        self.status = "active"
+
+    def deactivate_state(self):
+        self.status = "disable"
 
     def complete_check(self):
         return self.complete_variables == 2 * self.size_table * self.size_table
 
     def set_value(self, position: tuple, type_variable: str, value):
         if type_variable == "NUMBER":
-            self.number_variables[position[0]][position[1]] = value
+            self.number_variables[position[0]][position[1]].set_value(value)
         else:
-            self.color_variables[position[0]][position[1]] = value
+            self.color_variables[position[0]][position[1]].set_value(value)
 
         self.complete_variables += 1
 
-    def forward_checking(self, variable: Variable):
-        pass
+    def forward_checking(self, variable):
+        if type(variable) == NumberVariable:
+            neighbours = variable.get_neighbours()
+            for position in neighbours:
+                x, y = position
+                if self.number_variables[x][y].set_flag is False:
+                    if variable.value in self.number_variables[x][y].domain:
+                        self.number_variables[x][y].modify_domain(variable.value)
+
+                    self.number_variables[x][y].domain_size -= 1
+                    if self.number_variables[x][y].is_Empty():
+                        return -1
+                    self.number_variables[x][y].degree -= 1
+
+        if type(variable) == ColorVariable:
+            neighbours = variable.get_neighbours()
+            for position in neighbours:
+                x, y = position
+
+                if self.color_variables[x][y].set_flag is False:
+                    if variable.value in self.color_variables[x][y].domain:
+                        self.color_variables[x][y].modify_domain(variable.value)
+                    self.color_variables[x][y].domain_size -= 1
+                    if self.color_variables[x][y].is_Empty():
+                        return -1
+                    self.color_variables[x][y].degree -= 1
 
     def MRV_degree(self):
         self.priorities.sort()
@@ -134,7 +168,10 @@ class State:
             for c_variable in line:
                 representation += c_variable.__str__() + "\n"
 
-        representation += "====================================="
+        representation += "============Information===========\n"
+        representation += "Complete Variables : " + str(self.complete_variables) + "\n"
+        representation += "Status : " + self.status + "\n"
+        representation += "Table size : " + str(self.size_table)
         return representation
 
 
@@ -145,17 +182,8 @@ class IO:
         self.colors = {}
         self.number_variables = None
         self.color_variables = None
-
-    def get_degree(self, position: tuple, type_variable: str):
-        if type_variable == "NUMBER":
-            return 2 * (self.table_size-1)
-        else:
-            if position[0] == 0 or position[1] == 0 or position[0] == self.table_size-1 or position[1] == self.table_size-1:
-                if position == (0, 0) or position == (self.table_size-1, 0) or\
-                        position == (0, self.table_size-1) or position == (self.table_size-1, self.table_size-1):
-                    return 2
-                return 3
-            return 4
+        self.complete_variables = 0
+        self.priorities = []
 
     def get_input(self):
         self.color_count, self.table_size = map(int, input().split())
@@ -168,38 +196,57 @@ class IO:
             self.colors[color] = priority_color
             priority_color -= 1
 
+        init_number_assignment = []
+        init_color_assignment = []
+
         for x in range(self.table_size):
             line = input().split()
             for y in range(self.table_size):
 
-                degree = self.get_degree((x, y), "NUMBER")
+                degree = 2 * self.table_size - 2 + Variable.count_adjacent((x, y), self.table_size)
                 priority = max(self.table_size, self.color_count) - self.table_size + (degree / (2*self.table_size+3))
+                domain = set(range(1, self.table_size+1))
 
                 if line[y][0].isdigit():
                     value = int(line[y][0])
-                    new_variable = NumberVariable(value, (x, y), degree, True, priority, self.table_size, self.color_count)
-                else:
-                    new_variable = NumberVariable(None, (x, y), degree, False, priority, self.table_size, self.color_count)
+                    init_number_assignment.append((x, y, value))
+
+                new_variable = NumberVariable(None, (x, y), degree, False, priority, self.table_size, self.color_count, domain)
+
+                self.priorities.append(new_variable)
                 self.number_variables[x][y] = new_variable
 
-                degree = self.get_degree((x, y), "COLOR")
+                degree = 2 * Variable.count_adjacent((x, y), self.table_size)
                 priority = max(self.table_size, self.color_count) - 4 + (degree / (2 * self.table_size + 3))
 
                 if line[y][1].isalpha():
                     value = line[y][1]
-                    new_variable = ColorVariable(value, (x, y), self.colors, degree, True, priority, self.table_size, self.color_count)
-                else:
-                    new_variable = ColorVariable("None", (x, y), self.colors, degree, False, priority, self.table_size, self.color_count)
+                    init_color_assignment.append((x, y, value))
 
+                new_variable = ColorVariable("None", (x, y), deepcopy(self.colors), degree, False, priority, self.table_size, self.color_count)
+
+                self.priorities.append(new_variable)
                 self.color_variables[x][y] = new_variable
 
-        return self.color_count, self.table_size, self.number_variables, self.color_variables
+        return self.color_count, self.table_size, self.number_variables, self.color_variables, self.complete_variables,\
+               self.priorities, init_number_assignment, init_color_assignment
 
 
 if __name__ == "__main__":
     IO_parser = IO()
-    color_count, table_size, number_variables, color_variables = IO_parser.get_input()
-    init_state = State(table_size, number_variables, color_variables)
+    color_count, table_size, number_variables, color_variables, complete_variables, priorities , init_number_assignment, init_color_assignment = IO_parser.get_input()
+    init_state = State(table_size, number_variables, color_variables, complete_variables, priorities)
+
+    print(init_state)
+    for item in init_number_assignment:
+        init_state.set_value((item[0], item[1]), "NUMBER", item[2])
+        init_state.forward_checking(number_variables[item[0]][item[1]])
+
+    for item in init_color_assignment:
+        init_state.set_value((item[0], item[1]), "COLOR", item[2])
+        init_state.forward_checking(color_variables[item[0]][item[1]])
+        print(init_state)
+
 
 
 
