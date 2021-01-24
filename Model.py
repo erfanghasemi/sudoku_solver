@@ -59,6 +59,25 @@ class NumberVariable(Variable):
 
     def modify_domain(self, value):
         self.domain.remove(value)
+        self.domain_size -= 1
+
+    def restrict_domain(self, number: int, cmp: str):
+        deleted_items = []
+        print(type(number))
+        if cmp == "gt":
+            for item in self.domain:
+                if item < number:
+                    deleted_items.append(item)
+                    self.domain_size -= 1
+
+        elif cmp == "lt":
+            for item in self.domain:
+                if item > number:
+                    deleted_items.append(item)
+                    self.domain_size -= 1
+
+        for item in deleted_items:
+            self.domain.remove(item)
 
     def __str__(self):
         prefix = super().__str__()
@@ -92,6 +111,23 @@ class ColorVariable(Variable):
 
     def modify_domain(self, value):
         self.domain.pop(value, None)
+        self.domain_size -= 1
+
+    def restrict_domain(self, priority_color: int, cmp: str):
+        deleted_items = []
+        if cmp == "gt":
+            for item in self.domain:
+                if self.domain[item] < priority_color:
+                    deleted_items.append(item)
+                    self.domain_size -= 1
+
+        elif cmp == "lt":
+            for item in self.domain:
+                if self.domain[item] > priority_color:
+                    deleted_items.append(item)
+                    self.domain_size -= 1
+        for item in deleted_items:
+            self.domain.pop(item, None)
 
     def __str__(self):
         prefix = super().__str__()
@@ -105,10 +141,10 @@ class State:
         self.color_variables = color_variables
         self.complete_variables = complete_variables
         self.priorities = priorities
-        self.status = "active"
+        self.status = "ACTIVE"
 
     def deactivate_state(self):
-        self.status = "disable"
+        self.status = "DISABLE"
 
     def complete_check(self):
         return self.complete_variables == 2 * self.size_table * self.size_table
@@ -122,6 +158,10 @@ class State:
         self.complete_variables += 1
 
     def forward_checking(self, variable):
+
+        color_variable = self.color_variables[variable.position[0]][variable.position[1]]
+        number_variable = self.number_variables[variable.position[0]][variable.position[1]]
+
         if type(variable) == NumberVariable:
             neighbours = variable.get_neighbours()
             for position in neighbours:
@@ -129,11 +169,22 @@ class State:
                 if self.number_variables[x][y].set_flag is False:
                     if variable.value in self.number_variables[x][y].domain:
                         self.number_variables[x][y].modify_domain(variable.value)
+                        self.number_variables[x][y].degree -= 1
 
-                    self.number_variables[x][y].domain_size -= 1
                     if self.number_variables[x][y].is_Empty():
                         return -1
-                    self.number_variables[x][y].degree -= 1
+
+            if color_variable.set_flag is False and number_variable.set_flag is True:
+                neighbours = color_variable.get_neighbours()
+                for position in neighbours:
+                    x, y = position
+                    if self.number_variables[x][y].set_flag is True and self.color_variables[x][y].set_flag is True:
+                        if number_variable.value > self.number_variables[x][y].value:
+                            color_variable.restrict_domain(self.number_variables[x][y].domain[self.number_variables[x][y].value], "gt")
+                            color_variable.degree -= 1
+                        else:
+                            color_variable.restrict_domain(self.number_variables[x][y].domain[self.number_variables[x][y].value], "lt")
+                            color_variable.degree -= 1
 
         if type(variable) == ColorVariable:
             neighbours = variable.get_neighbours()
@@ -143,10 +194,45 @@ class State:
                 if self.color_variables[x][y].set_flag is False:
                     if variable.value in self.color_variables[x][y].domain:
                         self.color_variables[x][y].modify_domain(variable.value)
-                    self.color_variables[x][y].domain_size -= 1
+                        self.color_variables[x][y].degree -= 1
+
                     if self.color_variables[x][y].is_Empty():
                         return -1
-                    self.color_variables[x][y].degree -= 1
+
+            if color_variable.set_flag is True and number_variable.set_flag is False:
+                neighbours = color_variable.get_neighbours()
+                for position in neighbours:
+                    x, y = position
+                    if self.number_variables[x][y].set_flag is True and self.color_variables[x][y].set_flag is True:
+                        if color_variable.domain[color_variable.value] > self.color_variables[x][y].domain[self.color_variables[x][y].value]:
+                            number_variable.restrict_domain(self.number_variables[x][y].value, "gt")
+                            number_variable.degree -= 1
+                        else:
+                            number_variable.restrict_domain(self.number_variables[x][y].value, "lt")
+                            number_variable.degree -= 1
+
+        if color_variable.set_flag is True and number_variable.set_flag is True:
+            neighbours = color_variable.get_neighbours()
+            for position in neighbours:
+                x, y = position
+
+                if self.number_variables[x][y].set_flag is True and self.color_variables[x][y].set_flag is False:
+
+                    if number_variable.value > self.number_variables[x][y].value:
+                        self.color_variables[x][y].restrict_domain(color_variable.domain[color_variable.value], "lt")
+                        self.color_variables[x][y].degree -= 1
+                    else:
+                        self.color_variables[x][y].restrict_domain(color_variable.domain[color_variable.value], "gt")
+                        self.color_variables[x][y].degree -= 1
+
+                elif self.number_variables[x][y].set_flag is False and self.color_variables[x][y].set_flag is True:
+
+                    if color_variable.domain[color_variable.value] > color_variable[x][y].domain[color_variable[x][y].value]:
+                        self.number_variables[x][y].restrict_domain(number_variable.value, "lt")
+                        self.number_variables[x][y].degree -= 1
+                    else:
+                        self.number_variables[x][y].restrict_domain(number_variable.value, "gt")
+                        self.number_variables[x][y].degree -= 1
 
     def MRV_degree(self):
         self.priorities.sort()
@@ -241,6 +327,7 @@ if __name__ == "__main__":
     for item in init_number_assignment:
         init_state.set_value((item[0], item[1]), "NUMBER", item[2])
         init_state.forward_checking(number_variables[item[0]][item[1]])
+        print(init_state)
 
     for item in init_color_assignment:
         init_state.set_value((item[0], item[1]), "COLOR", item[2])
