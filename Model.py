@@ -66,7 +66,6 @@ class NumberVariable(Variable):
 
     def restrict_domain(self, number: int, cmp: str):
         deleted_items = []
-        print(type(number))
         if cmp == "gt":
             for item in self.domain:
                 if item < number:
@@ -164,11 +163,13 @@ class State:
         self.priorities.clear()
         for line in self.number_variables:
             for n_variable in line:
-                self.priorities.append(n_variable)
+                if not n_variable.set_flag:
+                    self.priorities.append(n_variable)
 
         for line in self.color_variables:
             for c_variable in line:
-                self.priorities.append(c_variable)
+                if not c_variable.set_flag:
+                    self.priorities.append(c_variable)
 
     def forward_checking(self, variable):
 
@@ -193,10 +194,10 @@ class State:
                     x, y = position
                     if self.number_variables[x][y].set_flag is True and self.color_variables[x][y].set_flag is True:
                         if number_variable.value > self.number_variables[x][y].value:
-                            color_variable.restrict_domain(self.number_variables[x][y].domain[self.number_variables[x][y].value], "gt")
+                            color_variable.restrict_domain(self.color_variables[x][y].domain[self.color_variables[x][y].value], "gt")
                             color_variable.degree -= 1
                         else:
-                            color_variable.restrict_domain(self.number_variables[x][y].domain[self.number_variables[x][y].value], "lt")
+                            color_variable.restrict_domain(self.color_variables[x][y].domain[self.color_variables[x][y].value], "lt")
                             color_variable.degree -= 1
                         color_variable.update_priority()
                         if color_variable.is_Empty():
@@ -249,7 +250,7 @@ class State:
 
                 elif self.number_variables[x][y].set_flag is False and self.color_variables[x][y].set_flag is True:
 
-                    if color_variable.domain[color_variable.value] > color_variable[x][y].domain[color_variable[x][y].value]:
+                    if color_variable.domain[color_variable.value] > self.color_variables[x][y].domain[self.color_variables[x][y].value]:
                         self.number_variables[x][y].restrict_domain(number_variable.value, "lt")
                         self.number_variables[x][y].degree -= 1
                     else:
@@ -268,15 +269,23 @@ class State:
     def next_childes(self):
         children = []
         selected_variable = self.MRV_degree()
+
         for choice in selected_variable.domain:
             child = deepcopy(self)
-            child.set_value(selected_variable.position, choice)
-            if child.forward_checking(selected_variable.position) == -1:
+
+            if type(selected_variable) == NumberVariable:
+                child.set_value(selected_variable.position, "NUMBER", choice)
+                active_status = child.forward_checking(child.number_variables[selected_variable.position[0]][selected_variable.position[1]])
+
+            elif type(selected_variable) == ColorVariable:
+                child.set_value(selected_variable.position, "COLOR", choice)
+                active_status = child.forward_checking(child.color_variables[selected_variable.position[0]][selected_variable.position[1]])
+
+            if active_status == -1:
                 child.deactivate_state()
             else:
                 children.append(child)
-            if child.complete_variables:
-                return child
+
         return children
 
     def __str__(self):
@@ -362,11 +371,13 @@ class IO:
 
         return init_state
 
-
-if __name__ == "__main__":
-    IO_parser = IO()
-    init_state = IO_parser.get_input()
-    print(init_state)
+    @staticmethod
+    def give_output(state: State):
+        for x in range(state.size_table):
+            print("\n\t  ", end= '')
+            for y in range(state.size_table):
+                print(str(state.number_variables[x][y].value)+state.color_variables[x][y].value, end='      ')
+            print("\n")
 
 
 
